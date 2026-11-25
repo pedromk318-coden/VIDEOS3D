@@ -1,0 +1,83 @@
+name: BridgeShort full render with audio
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system audio tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python audio dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy
+
+      - name: Install JavaScript dependencies
+        run: npm install
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Generate ElevenLabs narration and word timings
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+        run: python templates/audio/generate_voice.py
+
+      - name: Generate original music, synchronized SFX and final mix
+        run: |
+          python templates/audio/mix.py
+          mkdir -p public/audio
+          cp templates/audio/mix.wav public/audio/mix.wav
+
+      - name: Render complete Full HD video with audio
+        env:
+          REMOTION_GL: angle
+        run: |
+          mkdir -p out
+          npx remotion render src/index.tsx BridgeShort out/bridge-full-hd-with-audio.mp4 --scale=1 --codec=h264 --crf=16 --concurrency=1 --timeout=180000 --props='{"audioEnabled":true}'
+
+      - name: Upload final video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-full-hd-with-audio
+          path: out/bridge-full-hd-with-audio.mp4
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload audio stems and mix report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-audio-stems-and-report
+          path: |
+            templates/audio/mix.wav
+            templates/audio/stem_voice.wav
+            templates/audio/stem_music.wav
+            templates/audio/stem_sfx.wav
+            templates/audio/cues.md
+          if-no-files-found: ignore
+          retention-days: 14
