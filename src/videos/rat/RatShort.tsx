@@ -1,83 +1,57 @@
-import React from "react";
+import React, {useMemo} from "react";
+import * as THREE from "three";
 import {AbsoluteFill, Audio, interpolate, staticFile, useCurrentFrame} from "remotion";
+import {ThreeCanvas} from "@remotion/three";
+import {Pen, bodyFront, fxBurst, fxStars, type Outfit} from "../bridge/toon";
 
-const clamp = {extrapolateLeft:"clamp" as const, extrapolateRight:"clamp" as const};
+const clamp={extrapolateLeft:"clamp" as const,extrapolateRight:"clamp" as const};
+const MAN: Outfit={jacket:"#d65b35",pants:"#34445e",boots:"#252333",hair:"#3a2928",skin:"#ffe2c2",build:"adult"};
 
-const Man: React.FC<{frame:number}> = ({frame}) => {
-  const bite = interpolate(frame,[35,48,58,70],[0,1,1,0],clamp);
-  const shock = interpolate(frame,[125,145,175],[0,1,1],clamp);
-  const tail = interpolate(frame,[165,205,299],[0,1,1],clamp);
-  const tremble = frame>205 ? Math.sin(frame*1.7)*3 : 0;
-  return <g transform={`translate(${tremble} 0)`}>
-    <ellipse cx="540" cy="1555" rx="250" ry="45" fill="#17212b" opacity=".18"/>
-    <path d="M370 1130 Q330 1250 360 1490 L725 1490 Q750 1280 690 1130Z" fill="#c95e3d" stroke="#572d2a" strokeWidth="18"/>
-    <path d="M405 1190 Q310 1260 290 1435" fill="none" stroke="#e0a17c" strokeWidth="75" strokeLinecap="round"/>
-    <path d="M660 1190 Q770 1270 770 1415" fill="none" stroke="#e0a17c" strokeWidth="75" strokeLinecap="round"/>
-    <path d="M430 1475 Q395 1570 390 1630" fill="none" stroke="#343c50" strokeWidth="95" strokeLinecap="round"/>
-    <path d="M650 1475 Q690 1570 710 1630" fill="none" stroke="#343c50" strokeWidth="95" strokeLinecap="round"/>
-    <path d="M375 1635 Q330 1670 410 1685 L475 1680" fill="none" stroke="#242b39" strokeWidth="48" strokeLinecap="round"/>
-    <path d="M690 1635 Q660 1670 740 1685 L800 1680" fill="none" stroke="#242b39" strokeWidth="48" strokeLinecap="round"/>
-    <g transform="translate(0 -25)">
-      <path d="M385 810 Q360 560 520 520 Q710 500 720 760 L690 1110 Q545 1180 395 1080Z" fill="#e8b18d" stroke="#572d2a" strokeWidth="18"/>
-      <path d="M390 700 Q360 480 555 475 Q725 485 730 680 Q650 610 575 625 Q485 650 390 700Z" fill="#392d2c" stroke="#241f24" strokeWidth="18"/>
-      <path d="M420 835 Q465 795 505 835" fill="none" stroke="#543b35" strokeWidth="16" strokeLinecap="round"/>
-      <path d="M590 835 Q640 795 675 835" fill="none" stroke="#543b35" strokeWidth="16" strokeLinecap="round"/>
-      <ellipse cx="468" cy="875" rx="19" ry={shock?24:14} fill="#202632"/>
-      <ellipse cx="625" cy="875" rx="19" ry={shock?24:14} fill="#202632"/>
-      <path d={shock?"M510 960 Q550 900 595 960 Q560 1040 510 960Z":"M510 970 Q550 995 595 970"} fill="#713b43" stroke="#572d2a" strokeWidth="13"/>
-      <path d="M500 1080 Q545 1125 600 1080" fill="none" stroke="#a85d58" strokeWidth="12" strokeLinecap="round"/>
-    </g>
-    <g transform={`translate(0 ${-bite*40}) rotate(${bite*-18} 760 1000)`}>
-      <path d="M700 1030 Q770 1000 825 930" fill="none" stroke="#e0a17c" strokeWidth="62" strokeLinecap="round"/>
-      <path d="M820 930 Q870 890 900 920" fill="none" stroke="#e0a17c" strokeWidth="48" strokeLinecap="round"/>
-    </g>
-    <g opacity={tail}>
-      <path d={`M540 1465 C${540+tail*180} 1390 ${540+tail*250} 1480 ${540+tail*285} 1380`} fill="none" stroke="#8f5a43" strokeWidth="34" strokeLinecap="round"/>
-      <path d={`M${540+tail*275} 1388 q28 -30 42 -5 q-7 36 -42 5`} fill="#a86c50" stroke="#613d32" strokeWidth="9"/>
-    </g>
-  </g>;
+function actorTexture(frame:number) {
+ const c=document.createElement("canvas"); c.width=600; c.height=1000;
+ const g=c.getContext("2d")!; const p=new Pen(g);
+ const eating=frame<112, shocked=frame>128, tail=frame>185;
+ bodyFront(p,MAN,{phase:frame/10,mode:"stand",expr:shocked?"shock":eating?"lick":"dazed",seed:27,light:-2.1,tilt:shocked?-3:0,headTilt:shocked?-5:0,prop:null});
+ if(eating){p.ell(410,455,34,22,"#c7a9a0",5);p.ell(423,450,8,8,"#8f4d48",0);}
+ if(tail){const t=Math.min(1,(frame-185)/42);p.line([[310,920],[350+55*t,875],[395+75*t,915],[430+95*t,850]],"#a76d50",22);}
+ if(shocked){p.stroke([[190,300],[160,255]],8,"#fff3b0");p.stroke([[410,290],[445,245]],8,"#fff3b0");}
+ const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace; tex.needsUpdate=true; return tex;
+}
+const Actor:React.FC<{frame:number}> = ({frame})=>{
+ const texture=useMemo(()=>actorTexture(frame),[frame]);
+ return <sprite position={[-0.65,2.35,0.25]} scale={[2.9,4.85,1]}><spriteMaterial map={texture} transparent depthWrite={false}/></sprite>;
 };
-
-const Rat: React.FC<{frame:number}> = ({frame}) => {
- const chew=frame<85?Math.sin(frame*.6)*5:0;
- return <g transform={`translate(0 ${chew})`}>
-   <ellipse cx="805" cy="1040" rx="100" ry="58" fill="#8e929b" stroke="#353b48" strokeWidth="13"/>
-   <circle cx="735" cy="1000" r="48" fill="#aeb1b9" stroke="#353b48" strokeWidth="12"/>
-   <circle cx="720" cy="965" r="27" fill="#d58d9b" stroke="#353b48" strokeWidth="9"/>
-   <circle cx="750" cy="992" r="9" fill="#1d2430"/>
-   <path d="M895 1045 Q980 1050 1000 1120" fill="none" stroke="#bd8588" strokeWidth="13" strokeLinecap="round"/>
-   <path d="M700 1040 Q670 1085 720 1095" fill="none" stroke="#353b48" strokeWidth="11" strokeLinecap="round"/>
- </g>;
+const Room:React.FC<{frame:number}> = ({frame})=>{
+ const pulse=interpolate(frame,[175,205,260],[0,1,0.15],clamp);
+ return <>
+  <color attach="background" args={["#39749a"]}/>
+  <fog attach="fog" args={["#39749a",10,24]}/>
+  <ambientLight intensity={0.75} color="#b9c9ff"/>
+  <directionalLight position={[-4,7,5]} intensity={3.2} color="#ffd09a" castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048}/>
+  <pointLight position={[3,3,1]} intensity={1.8} color="#68b9ff"/>
+  <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,0]} receiveShadow><planeGeometry args={[18,18]}/><meshStandardMaterial color="#bd8059" roughness={0.92}/></mesh>
+  <mesh position={[0,3,-3]}><boxGeometry args={[12,6,0.35]}/><meshStandardMaterial color="#e5b78e" roughness={1}/></mesh>
+  <mesh position={[0,3,-2.78]}><boxGeometry args={[4.6,2.5,0.05]}/><meshStandardMaterial color="#5b9ebc" emissive="#173d58" emissiveIntensity={0.3}/></mesh>
+  <mesh position={[0,3.02,-2.7]}><boxGeometry args={[0.13,2.5,0.08]}/><meshStandardMaterial color="#f8e5c9"/></mesh>
+  <mesh position={[0,3.02,-2.68]}><boxGeometry args={[4.6,0.13,0.08]}/><meshStandardMaterial color="#f8e5c9"/></mesh>
+  <mesh position={[0,1.15,-2.7]}><boxGeometry args={[12,0.12,0.3]}/><meshStandardMaterial color="#754a3b"/></mesh>
+  <Actor frame={frame}/>
+  <group position={[1.55,0.72,0.1]} rotation={[0,0,Math.sin(frame*.15)*.035]}>
+   <mesh position={[0,.28,0]} scale={[.68,.42,.4]} castShadow><sphereGeometry args={[1,32,24]}/><meshStandardMaterial color="#8c929b" roughness={.88}/></mesh>
+   <mesh position={[-.42,.55,.03]} scale={[.28,.3,.25]} castShadow><sphereGeometry args={[1,24,20]}/><meshStandardMaterial color="#aeb2ba"/></mesh>
+   <mesh position={[-.52,.8,.03]} scale={[.15,.18,.09]} castShadow><sphereGeometry args={[1,24,20]}/><meshStandardMaterial color="#d98b9c"/></mesh>
+   <mesh position={[-.28,.62,.24]}><sphereGeometry args={[.045,12,12]}/><meshStandardMaterial color="#17151b"/></mesh>
+   <mesh position={[.55,.28,.02]} rotation={[0,0,-.25]}><tubeGeometry args={[new THREE.CatmullRomCurve3([new THREE.Vector3(0,0,0),new THREE.Vector3(.35,.12,0),new THREE.Vector3(.62,-.1,0)]),24,.035,8,false]}/><meshStandardMaterial color="#c47b82"/></mesh>
+  </group>
+  {pulse>0.02&&<pointLight position={[-.6,2.6,.5]} color="#ffe36e" intensity={pulse*4} distance={5}/>}
+ </>;
 };
-
-export const RatShort: React.FC = () => {
- const f=useCurrentFrame();
- const title=interpolate(f,[0,18,45],[0,1,0],clamp);
- const glow=interpolate(f,[170,210,299],[0,1,.15],clamp);
- const bg=f<170?"#f1d7b7":"#b8c9d1";
- return <AbsoluteFill style={{background:bg,overflow:"hidden"}}>
-   <svg viewBox="0 0 1080 1920" width="100%" height="100%" style={{position:"absolute"}}>
-     <defs><linearGradient id="wall" x2="0" y2="1"><stop stopColor={bg}/><stop offset="1" stopColor="#e6bfa0"/></linearGradient></defs>
-     <rect width="1080" height="1920" fill="url(#wall)"/>
-     <path d="M0 1450 Q260 1390 540 1450 T1080 1440 V1920 H0Z" fill="#b47a5b"/>
-     <path d="M0 1450 H1080" stroke="#704c42" strokeWidth="18"/>
-     <rect x="90" y="250" width="900" height="460" rx="35" fill="#f7e8d5" stroke="#72564b" strokeWidth="22"/>
-     <rect x="145" y="305" width="790" height="350" rx="15" fill="#b8d8dc"/>
-     <path d="M540 305 V655 M145 480 H935" stroke="#f8f0e7" strokeWidth="22"/>
-     <g transform={`translate(0 ${interpolate(f,[0,100],[80,0],clamp)})`}>
-       <Man frame={f}/>
-       {f<125 && <Rat frame={f}/>}
-     </g>
-     {glow>0 && <circle cx="540" cy="1000" r={180+glow*100} fill="#e8d76a" opacity={glow*.24}/>}
-     {f>175 && <g opacity={interpolate(f,[175,195],[0,1],clamp)}>
-       <path d="M250 520 l-45 -55 M830 520 l45 -55 M540 390 v-70" stroke="#fff7d4" strokeWidth="18" strokeLinecap="round"/>
-       <text x="540" y="300" textAnchor="middle" fontSize="64" fontWeight="900" fill="#713c42" stroke="#fff3df" strokeWidth="5" paintOrder="stroke">QUE ISSO?!</text>
-     </g>}
-     <g opacity={title} transform="translate(0 180)">
-       <rect x="120" y="80" width="840" height="140" rx="40" fill="#352c35" opacity=".9"/>
-       <text x="540" y="173" textAnchor="middle" fontSize="68" fontWeight="900" fill="#fff3df">O RATO MISTERIOSO</text>
-     </g>
-   </svg>
-   <Audio src={staticFile("audio/rat-sfx.wav")}/>
+export const RatShort:React.FC=()=>{
+ const frame=useCurrentFrame();
+ return <AbsoluteFill style={{background:"#39749a"}}>
+  <ThreeCanvas width={1080} height={1920} shadows gl={{antialias:true,alpha:false}} camera={{position:[0,2.8,9],fov:38,near:.1,far:100}}>
+   <Room frame={frame}/>
+  </ThreeCanvas>
+  <Audio src={staticFile("audio/rat-sfx.wav")}/>
  </AbsoluteFill>;
 };
