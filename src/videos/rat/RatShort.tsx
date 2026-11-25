@@ -41,20 +41,41 @@ function makeActor(){
  return {canvas,tex,mesh,material,depth};
 }
 function drawActor(actor:ReturnType<typeof makeActor>,frame:number){
- const g=actor.canvas.getContext("2d")!;g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,1200,2000);g.setTransform(2,0,0,2,0,0);
+ const g=actor.canvas.getContext("2d")!;
+ g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,1200,2000);g.setTransform(2,0,0,2,0,0);
  const p=new Pen(g);
- const eating=frame<88, sick=frame>=88&&frame<178, shock=frame>=178;
- bodyFront(p,MAN,{phase:frame/8,mode:"stand",expr:shock?"shock":sick?"pained":eating?"lick":"nervous",seed:27,light:-2.1,tilt:shock?-4:sick?5:0,headTilt:shock?-7:0,prop:null});
- if(frame<105){
-  const armY=interpolate(frame,[0,70,105],[490,430,510],clamp);
-  p.line([[380,490],[405,armY],[448,armY-20]],"#ffe0bd",25);
-  p.ell(458,armY-23,19,15,"#ffe0bd",3);
-  p.ell(478,armY-27,24,17,"#a89a92",4);p.ell(488,armY-30,7,5,"#704a49",0);
- }
+ const eating=frame>=28&&frame<112, sick=frame>=112&&frame<205, shock=frame>=205;
+ const reach=interpolate(frame,[0,22,48,90,112],[0,0.25,1,1,0.1],clamp);
+ const h=interpolate(frame,[0,28,70,112],[520,490,420,510],clamp);
+ // Reuse the repository's character drawing system and its exact 600x1000 design space.
+ bodyFront(p,MAN,{phase:frame/5.2,mode:"stand",expr:shock?"shock":sick?"pained":eating?"lick":"nervous",seed:27,light:-2.1,tilt:shock?-5:sick?6:0,headTilt:shock?-8:0,prop:null});
+ // Reinforce the torso silhouette and clothing details at the same design scale; this avoids the torso disappearing
+ // against the bright room when the card is lit by the full 3D scene.
+ p.ell(300,493,88,151,"#c85a38",8);
+ p.poly([[242,378],[358,378],[374,432],[350,454],[300,438],[250,454],[226,432]],"#d9784d",5);
+ p.stroke([[250,414],[268,446],[300,462],[332,446],[350,414]],5,"#f4b08b");
+ p.line([[230,410],[198,478],[205+reach*104, h-15]],"#c85a38",34);
+ p.line([[370,410],[405,472],[410,510]],"#c85a38",34);
+ p.ell(205+reach*104,h-15,18,17,"#ffe0bd",5);
+ // Collar, shirt buttons and belt are crisp, inked shapes, not flat geometry primitives.
+ p.poly([[274,383],[300,414],[326,383],[315,373],[300,393],[285,373]],"#f1d8bd",3);
+ for(let k=0;k<3;k++)p.ell(300,470+k*34,4,4,"#f4c77d",1);
+ p.band([[236,620],[364,620]],"#604333",13,3,"round");
+ p.ell(300,620,10,12,"#d8b56f",3);
+ // Face accents are redrawn in the same ink language, with expression changes on ones.
+ const eyeY=252, blink=frame%73<4;
+ if(blink){p.stroke([[267,eyeY],[282,eyeY]],5);p.stroke([[318,eyeY],[333,eyeY]],5);}
+ else {p.ell(275,eyeY,6,10,"#241726",0);p.ell(325,eyeY,6,10,"#241726",0);}
+ p.stroke([[263,228],[280,224]],5,"#241726");p.stroke([[320,224],[337,228]],5,"#241726");
+ if(shock){p.ell(300,300,13,18,"#5a1e28",3);}
+ else if(eating){p.ell(307,295,12,9,"#5a1e28",3);p.ell(311,302,7,5,"#e86e78",0);}
+ else if(sick){p.stroke([[285,300],[300,307],[315,300]],6,"#5a1e28");}
+ else {p.arc(300,302,15,8,15,165,5,"#5a1e28");}
+ // A few hand-drawn sweat/sickness marks timed to the transformation.
  if(sick||shock){
-  const a=interpolate(frame,[88,115,178],[0,.9,.15],clamp);
-  p.ell(300,650,62,78,"rgba(255,190,70,"+a+")",0);
-  p.ell(300,650,40,54,"rgba(255,245,150,"+(a*.42)+")",0);
+  const a=interpolate(frame,[112,145,205],[0,.9,.2],clamp);
+  p.ell(205,350,48,65,"rgba(255,190,70,"+a+")",0);
+  p.ell(205,350,27,42,"rgba(255,245,150,"+(a*.5)+")",0);
   if(frame%12<6){p.stroke([[205,340],[175,300]],7,"#fff1a6");p.stroke([[405,345],[438,302]],7,"#fff1a6");}
  }
  actor.tex.needsUpdate=true;
@@ -109,10 +130,10 @@ const Room:React.FC<{frame:number}> = ({frame})=>{
   <mesh position={[-2.9,1.5,-1.9]}><boxGeometry args={[.16,3,.16]}/><meshLambertMaterial color="#754638"/></mesh>
   <mesh position={[-.75,1.1,.1]}><sphereGeometry args={[.48,24,18]}/><meshLambertMaterial color="#c85a38" transparent opacity={0}/></mesh>
   <primitive object={actor.mesh}/>
-  <group position={[.55,.32,.45]} rotation={[0,0,tail*.3]} visible={tail>0}>
+  <group position={[-.55,.32,.45]} rotation={[0,0,tail*.3]} visible={tail>0}>
    <mesh geometry={tailGeo} scale={[tail,tail,tail]} castShadow><meshLambertMaterial color="#9b644b"/></mesh>
   </group>
-  <group position={[1.55,.55,.15]} rotation={[0,Math.PI/2,0]}>
+  <group position={[1.15,.55,.15]} rotation={[0,Math.PI/2,0]}>
    <mesh position={[0,.05,0]} scale={[.7,.4,.45]} castShadow><sphereGeometry args={[1,32,24]}/><meshLambertMaterial color="#9299a5"/></mesh>
    <mesh position={[-.42,.34,.02]} scale={[.3,.28,.26]} castShadow><sphereGeometry args={[1,24,18]}/><meshLambertMaterial color="#aeb2bd"/></mesh>
    <mesh position={[-.53,.57,.02]} scale={[.16,.18,.1]}><sphereGeometry args={[1,20,16]}/><meshLambertMaterial color="#d68a9a"/></mesh>
