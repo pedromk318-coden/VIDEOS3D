@@ -1,6 +1,14 @@
 name: RatShort 10-second test
 
 on:
+  push:
+    branches:
+      - rat-short-test
+    paths:
+      - "src/rat-index.tsx"
+      - "src/videos/rat/**"
+      - "scripts/generate_rat_sfx.py"
+      - ".github/workflows/rat-short-test.yml"
   workflow_dispatch:
 
 permissions:
