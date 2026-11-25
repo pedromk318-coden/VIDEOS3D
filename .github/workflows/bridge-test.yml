@@ -1,0 +1,36 @@
+name: BridgeShort render test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: TypeScript check
+        run: npm run typecheck
+      - name: Render first 3 seconds
+        env:
+          REMOTION_GL: angle
+        run: npx remotion render src/index.tsx BridgeShort out/bridge-test.mp4 --frames=0-89 --scale=0.25 --codec=h264
+      - name: Upload test video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-test-video
+          path: out/bridge-test.mp4
+          if-no-files-found: ignore
+          retention-days: 7
