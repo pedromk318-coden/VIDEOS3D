@@ -2,6 +2,8 @@ name: BridgeShort render test
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
