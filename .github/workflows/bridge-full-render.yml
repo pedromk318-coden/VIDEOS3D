@@ -40,10 +40,7 @@ jobs:
       - name: TypeScript check
         run: npm run typecheck
 
-      - name: Generate ElevenLabs narration and word timings
-        env:
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+      - name: Prepare uploaded narration and word timings
         run: python templates/audio/generate_voice.py
 
       - name: Generate original music, synchronized SFX and final mix
