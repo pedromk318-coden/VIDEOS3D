@@ -5,153 +5,90 @@ import {ThreeCanvas} from "@remotion/three";
 import {useThree} from "@react-three/fiber";
 import {EffectComposer} from "@react-three/postprocessing";
 import {BlendFunction, BloomEffect, ToneMappingEffect, ToneMappingMode} from "postprocessing";
-import {Pen, bodyFront, type Outfit} from "../bridge/toon";
-import {cardShade} from "../bridge/cardshade";
-import {CHAR, TONE, twoTone} from "../bridge/shade";
-import {InkPass, NOINK, noInkFallback} from "../bridge/ink";
+import {bodyFront, fxBurst, fxPuff, Pen, type Outfit} from "../bridge/toon";
+import {Actor, Pool} from "../bridge/cast";
+import {InkPass, noInkFallback} from "../bridge/ink";
 import {LensBlur} from "../bridge/lensblur";
 import {GradeEffect, GRADES, GRADE_STRENGTH} from "../bridge/grade";
-import {ctex} from "../bridge/paint";
+import {LIGHTS} from "../bridge/lights";
 
 const clamp={extrapolateLeft:"clamp" as const,extrapolateRight:"clamp" as const};
-const MAN:Outfit={jacket:"#c85a38",pants:"#34445e",boots:"#282536",hair:"#302326",skin:"#ffe0bd",build:"adult"};
-const BODY_GEO=(()=>{const g=new THREE.PlaneGeometry(600*.00216,1000*.00216);g.translate(0,(975-500)*.00216,0);return g;})();
-const makeWood=()=>ctex("rat-room-wood-v2",512,512,(g,r)=>{
- g.fillStyle="#bd8150";g.fillRect(0,0,512,512);
- for(let y=0;y<16;y++){g.fillStyle=["#c98d58","#b87846","#d49b63","#bd804d"][y%4];g.fillRect(0,y*32,512,32);
-  g.strokeStyle="rgba(75,42,25,.38)";g.lineWidth=2;for(let k=0;k<4;k++){const yy=y*32+5+r()*22;g.beginPath();g.moveTo(0,yy);g.bezierCurveTo(130,yy-4,340,yy+5,512,yy);g.stroke();}
-  g.fillStyle="rgba(55,31,22,.55)";g.fillRect(0,y*32,512,2);
- }
-});
-const makeWall=()=>ctex("rat-room-wall-v2",512,512,(g,r)=>{
- g.fillStyle="#d8b99b";g.fillRect(0,0,512,512);
- for(let i=0;i<170;i++){g.fillStyle=i%2?"rgba(255,239,214,.13)":"rgba(99,66,54,.07)";g.beginPath();g.ellipse(r()*512,r()*512,8+r()*28,3+r()*10,r()*3,0,Math.PI*2);g.fill();}
- g.strokeStyle="rgba(88,56,48,.18)";g.lineWidth=2;for(let y=64;y<512;y+=64){g.beginPath();g.moveTo(0,y);g.lineTo(512,y);g.stroke();}
-});
-const wood=makeWood(), wall=makeWall();
-const mat=(color:string)=>twoTone(new THREE.MeshLambertMaterial({color}));
-const woodMat=twoTone(new THREE.MeshLambertMaterial({map:wood}));
-const wallMat=twoTone(new THREE.MeshLambertMaterial({map:wall}));
-function makeActor(){
- const canvas=document.createElement("canvas");canvas.width=1200;canvas.height=2000;
- const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=8;
- const material=cardShade(new THREE.MeshLambertMaterial({map:tex,transparent:true,alphaTest:.45,side:THREE.DoubleSide}));
- const depth=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,map:tex,alphaTest:.45,side:THREE.DoubleSide});
- const mesh=new THREE.Mesh(BODY_GEO,material);mesh.customDepthMaterial=depth;mesh.layers.set(NOINK);mesh.castShadow=false;mesh.receiveShadow=true;
- return {canvas,tex,mesh,material,depth};
-}
-function drawActor(actor:ReturnType<typeof makeActor>,frame:number){
- const g=actor.canvas.getContext("2d")!;
- g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,1200,2000);g.setTransform(2,0,0,2,0,0);
- const p=new Pen(g);
- const eating=frame>=28&&frame<112, sick=frame>=112&&frame<205, shock=frame>=205;
- const reach=interpolate(frame,[0,22,48,90,112],[0,0.25,1,1,0.1],clamp);
- const h=interpolate(frame,[0,28,70,112],[520,490,420,510],clamp);
- // Reuse the repository's character drawing system and its exact 600x1000 design space.
- bodyFront(p,MAN,{phase:frame/5.2,mode:"stand",expr:shock?"shock":sick?"pained":eating?"lick":"nervous",seed:27,light:-2.1,tilt:shock?-5:sick?6:0,headTilt:shock?-8:0,prop:null});
- // Reinforce the torso silhouette and clothing details at the same design scale; this avoids the torso disappearing
- // against the bright room when the card is lit by the full 3D scene.
- p.ell(300,493,88,151,"#c85a38",8);
- p.poly([[242,378],[358,378],[374,432],[350,454],[300,438],[250,454],[226,432]],"#d9784d",5);
- p.stroke([[250,414],[268,446],[300,462],[332,446],[350,414]],5,"#f4b08b");
- p.line([[230,410],[198,478],[205+reach*104, h-15]],"#c85a38",34);
- p.line([[370,410],[405,472],[410,510]],"#c85a38",34);
- p.ell(205+reach*104,h-15,18,17,"#ffe0bd",5);
- // Collar, shirt buttons and belt are crisp, inked shapes, not flat geometry primitives.
- p.poly([[274,383],[300,414],[326,383],[315,373],[300,393],[285,373]],"#f1d8bd",3);
- for(let k=0;k<3;k++)p.ell(300,470+k*34,4,4,"#f4c77d",1);
- p.band([[236,620],[364,620]],"#604333",13,3,"round");
- p.ell(300,620,10,12,"#d8b56f",3);
- // Face accents are redrawn in the same ink language, with expression changes on ones.
- const eyeY=252, blink=frame%73<4;
- if(blink){p.stroke([[267,eyeY],[282,eyeY]],5);p.stroke([[318,eyeY],[333,eyeY]],5);}
- else {p.ell(275,eyeY,6,10,"#241726",0);p.ell(325,eyeY,6,10,"#241726",0);}
- p.stroke([[263,228],[280,224]],5,"#241726");p.stroke([[320,224],[337,228]],5,"#241726");
- if(shock){p.ell(300,300,13,18,"#5a1e28",3);}
- else if(eating){p.ell(307,295,12,9,"#5a1e28",3);p.ell(311,302,7,5,"#e86e78",0);}
- else if(sick){p.stroke([[285,300],[300,307],[315,300]],6,"#5a1e28");}
- else {p.arc(300,302,15,8,15,165,5,"#5a1e28");}
- // A few hand-drawn sweat/sickness marks timed to the transformation.
- if(sick||shock){
-  const a=interpolate(frame,[112,145,205],[0,.9,.2],clamp);
-  p.ell(205,350,48,65,"rgba(255,190,70,"+a+")",0);
-  p.ell(205,350,27,42,"rgba(255,245,150,"+(a*.5)+")",0);
-  if(frame%12<6){p.stroke([[205,340],[175,300]],7,"#fff1a6");p.stroke([[405,345],[438,302]],7,"#fff1a6");}
- }
- actor.tex.needsUpdate=true;
-}
-const Room:React.FC<{frame:number}> = ({frame})=>{
+const MAN:Outfit={jacket:"#b94f35",pants:"#35445e",boots:"#282536",hair:"#302326",skin:"#f3c9a5",build:"adult"};
+const FLOOR=new THREE.MeshStandardMaterial({color:"#987052",roughness:.88});
+const WALL=new THREE.MeshStandardMaterial({color:"#b99c83",roughness:.95});
+const WOOD=new THREE.MeshStandardMaterial({color:"#754a35",roughness:.72});
+const METAL=new THREE.MeshStandardMaterial({color:"#393744",roughness:.48});
+const RAT=new THREE.MeshStandardMaterial({color:"#858b98",roughness:.8});
+const PINK=new THREE.MeshStandardMaterial({color:"#d58b9a",roughness:.75});
+const makeRat=()=>{
+ const g=new THREE.Group();
+ const body=new THREE.Mesh(new THREE.SphereGeometry(.32,32,24),RAT);body.scale.set(1.35,.72,.8);body.position.y=.34;g.add(body);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.2,28,20),RAT);head.position.set(.34,.52,0);g.add(head);
+ for(const z of [-.14,.14]){const ear=new THREE.Mesh(new THREE.SphereGeometry(.105,20,16),PINK);ear.scale.set(.55,1,.35);ear.position.set(.27,.69,z);g.add(ear);}
+ const eyeMat=new THREE.MeshBasicMaterial({color:"#17131b"});
+ const eye=new THREE.Mesh(new THREE.SphereGeometry(.025,12,10),eyeMat);eye.position.set(.49,.56,.16);g.add(eye);
+ const tailCurve=new THREE.CatmullRomCurve3([new THREE.Vector3(-.38,.34,0),new THREE.Vector3(-.68,.28,0),new THREE.Vector3(-.9,.38,.02),new THREE.Vector3(-1.08,.28,.03)]);
+ const tail=new THREE.Mesh(new THREE.TubeGeometry(tailCurve,32,.018,8,false),PINK);g.add(tail);
+ return g;
+};
+const ctex=(name:string,draw:(g:CanvasRenderingContext2D)=>void)=>{
+ const c=document.createElement("canvas");c.width=c.height=1024;const g=c.getContext("2d")!;draw(g);
+ const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t;
+};
+const floorTex=ctex("floor",(g)=>{g.fillStyle="#a87952";g.fillRect(0,0,1024,1024);for(let y=0;y<32;y++){g.fillStyle=y%2?"#b8865d":"#986a49";g.fillRect(0,y*32,1024,30);g.strokeStyle="rgba(49,29,23,.35)";g.lineWidth=2;for(let x=0;x<1024;x+=140){g.beginPath();g.moveTo(x,y*32);g.lineTo(x+80,y*32+30);g.stroke();}}});
+FLOOR.map=floorTex;FLOOR.needsUpdate=true;
+const wallTex=ctex("wall",(g)=>{g.fillStyle="#c9ad91";g.fillRect(0,0,1024,1024);for(let y=0;y<1024;y+=128){g.strokeStyle="rgba(83,56,47,.18)";g.lineWidth=3;g.beginPath();g.moveTo(0,y);g.lineTo(1024,y);g.stroke();}for(let i=0;i<500;i++){g.fillStyle=i%2?"rgba(255,239,215,.12)":"rgba(82,57,49,.07)";g.beginPath();g.ellipse(Math.random()*1024,Math.random()*1024,2+Math.random()*10,2+Math.random()*6,0,0,Math.PI*2);g.fill();}});
+WALL.map=wallTex;WALL.needsUpdate=true;
+
+const Room:React.FC<{frame:number}>=({frame})=>{
  const {scene,camera}=useThree();
- const actor=useMemo(()=>makeActor(),[]);
+ const root=useMemo(()=>new THREE.Group(),[]);
+ const pool=useMemo(()=>new Pool(),[]);
+ const man=useMemo(()=>new Actor(root),[root]);
+ const rat=useMemo(()=>makeRat(),[]);
  const ink=useMemo(()=>new InkPass(scene,camera as THREE.PerspectiveCamera),[scene,camera]);
  const lens=useMemo(()=>new LensBlur({maxCoC:24,nearScale:1.2}),[]);
- const bloom=useMemo(()=>new BloomEffect({blendFunction:BlendFunction.ADD,intensity:.55,luminanceThreshold:1,luminanceSmoothing:.2,mipmapBlur:true,levels:6,radius:.6}),[]);
+ const bloom=useMemo(()=>new BloomEffect({blendFunction:BlendFunction.ADD,intensity:.5,luminanceThreshold:1,luminanceSmoothing:.2,mipmapBlur:true,levels:6,radius:.6}),[]);
  const tone=useMemo(()=>new ToneMappingEffect({mode:ToneMappingMode.NEUTRAL}),[]);
- const grade=useMemo(()=>new GradeEffect(GRADES.day,GRADE_STRENGTH.day),[]);
- const post=useMemo(()=><EffectComposer multisampling={4}>
-  <primitive object={ink} dispose={null}/><primitive object={lens.pre} dispose={null}/><primitive object={lens.main} dispose={null}/>
-  <primitive object={bloom} dispose={null}/><primitive object={tone} dispose={null}/><primitive object={grade} dispose={null}/>
- </EffectComposer>,[ink,lens,bloom,tone,grade]);
- useEffect(()=>()=>{ink.dispose();lens.dispose();bloom.dispose();tone.dispose();grade.dispose();actor.tex.dispose();actor.material.dispose();actor.depth.dispose();actor.mesh.geometry.dispose();},[ink,lens,bloom,tone,grade,actor]);
- useEffect(()=>{drawActor(actor,frame);},[actor,frame]);
- useEffect(()=>{
-  CHAR.uCharTint.value.set(1,.94,.92);CHAR.uCharShade.value=.86;CHAR.uGrad.value=.07;CHAR.uBodyGrad.value=.2;CHAR.uSideTint.value.set(.92,.9,.96);
-  TONE.uLitCol.value.set(1.5,1.44,1.32);TONE.uShadeCol.value.set(.3,.29,.36);TONE.uShadeLift.value.set(.05,.06,.11);
-  TONE.uLambert.value=.35;TONE.uSideK.value=.84;TONE.uTerm.value=.2;TONE.uBounce.value.set(0,0,0);TONE.uSat.value=1.08;
- },[]);
- const tail=interpolate(frame,[178,210,260,299],[0,.65,1,1],clamp);
- const tailCurve=useMemo(()=>new THREE.CatmullRomCurve3([new THREE.Vector3(0,0,0),new THREE.Vector3(.35,.12,0),new THREE.Vector3(.7,.38,.02),new THREE.Vector3(1.05,.15,.04),new THREE.Vector3(1.28,.72,.06)]),[]);
- const tailGeo=useMemo(()=>new THREE.TubeGeometry(tailCurve,40,.065,10,false),[tailCurve]);
- const focus= new THREE.Vector3(0,1.4,0).applyMatrix4((camera as THREE.PerspectiveCamera).matrixWorld);
- (camera as THREE.PerspectiveCamera).getWorldDirection(new THREE.Vector3());
- lens.focus=7.5;lens.cInf=frame>80&&frame<180?1.7:2.2;
- const shake=frame>=178?Math.sin(frame*2.4)*.018:0;
- camera.position.x=shake;
- camera.position.y=2.05+Math.sin(frame*.018)*.018;
- camera.lookAt(0,1.35,0);
- actor.mesh.position.set(-.75,0,.15);actor.mesh.rotation.y=-.06;
+ const grade=useMemo(()=>new GradeEffect(GRADES.golden,GRADE_STRENGTH.golden),[]);
+ const post=useMemo(()=><EffectComposer multisampling={4}><primitive object={ink} dispose={null}/><primitive object={lens.pre} dispose={null}/><primitive object={lens.main} dispose={null}/><primitive object={bloom} dispose={null}/><primitive object={tone} dispose={null}/><primitive object={grade} dispose={null}/></EffectComposer>,[ink,lens,bloom,tone,grade]);
+ useEffect(()=>()=>{ink.dispose();lens.dispose();bloom.dispose();tone.dispose();grade.dispose();},[ink,lens,bloom,tone,grade]);
+ const eating=frame>=45&&frame<122, sick=frame>=122&&frame<205, transformed=frame>=205;
+ const reach=interpolate(frame,[0,25,45,100,122],[0,0.15,1,1,0],clamp);
+ const pose=frame<45?"march":frame<122?"stand":frame<205?"fall":"shock";
+ const expr=transformed?"shock":sick?"pained":eating?"lick":"nervous";
+ man.r=pool.req("rat-man-"+pose+"-"+expr+"-"+Math.round(frame/2),1800,3000,3,(p)=>{
+  bodyFront(p,MAN,{phase:frame/18,mode:pose==="march"?"march":pose==="fall"?"fall":"stand",expr,seed:27,light:-Math.PI/2,tilt:sick?8:transformed?-7:0,headTilt:eating?-10:transformed?-8:0,prop:null});
+  if(eating){const y=interpolate(frame,[45,72,100,122],[515,455,455,510],clamp);p.stroke([[390,480],[420,y],[460,y-15]],30,"#b94f35");p.ell(466,y-18,18,16,"#f3c9a5",4);}
+  if(sick||transformed){const a=interpolate(frame,[122,150,205],[0,.9,.25],clamp);p.ell(205,390,48,65,"rgba(255,190,70,"+a+")",0);if(frame%10<5)p.stroke([[170,310],[145,270]],7,"#fff0a6");}
+ });
+ pool.flush();man.bind();man.mesh.visible=true;man.mesh.position.set(-.78,0,.25);man.mesh.rotation.set(0,0,0);man.mesh.scale.set(1,1,1);
+ const tailGrow=interpolate(frame,[205,235,270,299],[0,.35,1,1],clamp);
+ camera.position.set(.05,2.05,7.7);camera.lookAt(0,1.18,0);camera.updateMatrixWorld();
+ const shake=frame>205?Math.sin(frame*2.1)*.025:0;camera.position.x=shake;
+ rat.position.set(1.1,0,.2);rat.rotation.y=-.35+Math.sin(frame/9)*.08;rat.scale.setScalar(1);
+ const newTail=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0,0,0),new THREE.Vector3(.2,.08,0),new THREE.Vector3(.42,.25,.02),new THREE.Vector3(.65,.18,.04),new THREE.Vector3(.82,.55,.05)]),36,.055,10,false),new THREE.MeshStandardMaterial({color:"#9b644b",roughness:.8}));
+ newTail.scale.setScalar(tailGrow);newTail.position.set(-.2,.9,.5);
  noInkFallback(scene);
  return <>
-  <color attach="background" args={["#5b83ad"]}/>
-  <fog attach="fog" args={["#b8d0ec",12,34]}/>
-  <ambientLight intensity={.48} color="#8ca8df"/>
-  <hemisphereLight args={["#9ec8ff","#74536b",.65]}/>
-  <directionalLight position={[-4,7,5]} intensity={3.1} color="#ffd2a0" castShadow shadow-mapSize-width={4096} shadow-mapSize-height={4096}/>
-  <directionalLight position={[4,3,1]} intensity={.48} color="#788dff"/>
-  <pointLight position={[2.5,2.4,1.3]} intensity={1.1} color="#e18a64"/>
-  <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.03,0]} receiveShadow><planeGeometry args={[18,18]}/><primitive object={woodMat} attach="material"/></mesh>
-  <mesh position={[0,3,-3.1]}><boxGeometry args={[12,6,.35]}/><primitive object={wallMat} attach="material"/></mesh>
-  <mesh position={[0,2.95,-2.88]}><boxGeometry args={[3.3,2.35,.08]}/><meshBasicMaterial color="#4d8eb9"/></mesh>
-  <mesh position={[-1.65,2.95,-2.78]}><boxGeometry args={[.12,2.5,.16]}/><meshLambertMaterial color="#f3dfc4"/></mesh>
-  <mesh position={[0,4.15,-2.78]}><boxGeometry args={[3.4,.12,.16]}/><meshLambertMaterial color="#f3dfc4"/></mesh>
-  <mesh position={[0,1.72,-2.78]}><boxGeometry args={[3.4,.12,.16]}/><meshLambertMaterial color="#f3dfc4"/></mesh>
-  <mesh position={[1.55,.7,-1.1]}><boxGeometry args={[2.4,1.4,.7]}/><primitive object={woodMat} attach="material"/></mesh>
-  <mesh position={[1.55,1.42,-1.1]}><boxGeometry args={[2.5,.13,.8]}/><meshLambertMaterial color="#e7bf8b"/></mesh>
-  <mesh position={[-2.9,1.5,-1.9]}><boxGeometry args={[.16,3,.16]}/><meshLambertMaterial color="#754638"/></mesh>
-  <mesh position={[-.75,1.1,.1]}><sphereGeometry args={[.48,24,18]}/><meshLambertMaterial color="#c85a38" transparent opacity={0}/></mesh>
-  <primitive object={actor.mesh}/>
-  <group position={[-.55,.32,.45]} rotation={[0,0,tail*.3]} visible={tail>0}>
-   <mesh geometry={tailGeo} scale={[tail,tail,tail]} castShadow><meshLambertMaterial color="#9b644b"/></mesh>
-  </group>
-  <group position={[1.15,.55,.15]} rotation={[0,Math.PI/2,0]}>
-   <mesh position={[0,.05,0]} scale={[.7,.4,.45]} castShadow><sphereGeometry args={[1,32,24]}/><meshLambertMaterial color="#9299a5"/></mesh>
-   <mesh position={[-.42,.34,.02]} scale={[.3,.28,.26]} castShadow><sphereGeometry args={[1,24,18]}/><meshLambertMaterial color="#aeb2bd"/></mesh>
-   <mesh position={[-.53,.57,.02]} scale={[.16,.18,.1]}><sphereGeometry args={[1,20,16]}/><meshLambertMaterial color="#d68a9a"/></mesh>
-   <mesh position={[-.29,.42,.25]}><sphereGeometry args={[.035,12,12]}/><meshBasicMaterial color="#14131a"/></mesh>
-   <mesh position={[-.64,.35,.2]}><sphereGeometry args={[.035,10,8]}/><meshBasicMaterial color="#28212a"/></mesh>
-   <mesh position={[-.68,.32,.22]}><sphereGeometry args={[.025,8,8]}/><meshBasicMaterial color="#28212a"/></mesh>
-   <mesh position={[-.72,.29,.24]}><sphereGeometry args={[.018,8,8]}/><meshBasicMaterial color="#28212a"/></mesh>
-   <mesh position={[.55,.24,0]} rotation={[0,0,-.2]}><tubeGeometry args={[new THREE.CatmullRomCurve3([new THREE.Vector3(0,0,0),new THREE.Vector3(.34,.12,0),new THREE.Vector3(.62,-.1,0)]),24,.035,8,false]}/><meshLambertMaterial color="#c47b82"/></mesh>
-  </group>
+  <color attach="background" args={["#8da4bd"]}/><fog attach="fog" args={["#c3c9d3",10,26]}/>
+  <ambientLight intensity={.38} color="#a7b9df"/>
+  <hemisphereLight args={["#c4dcff","#60465b",.75]}/>
+  <directionalLight position={[-4,7,5]} intensity={3.2} color="#ffd0a0" castShadow shadow-mapSize-width={4096} shadow-mapSize-height={4096}/>
+  <directionalLight position={[4,3,1]} intensity={.5} color="#8296ff"/>
+  <pointLight position={[2.2,2.4,1.2]} intensity={1.1} color="#f2a078"/>
+  <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.04,0]} receiveShadow><planeGeometry args={[18,18]}/><primitive object={FLOOR} attach="material"/></mesh>
+  <mesh position={[0,3,-3.2]}><boxGeometry args={[12,6,.35]}/><primitive object={WALL} attach="material"/></mesh>
+  <mesh position={[-1.25,2.85,-2.95]}><boxGeometry args={[2.6,2.2,.12]}/><meshBasicMaterial color="#426f9a"/></mesh>
+  <mesh position={[-1.25,2.85,-2.86]}><boxGeometry args={[.12,2.3,.15]}/><meshStandardMaterial color="#f2d9b7"/></mesh>
+  <mesh position={[-1.25,3.98,-2.86]}><boxGeometry args={[2.7,.12,.15]}/><meshStandardMaterial color="#f2d9b7"/></mesh>
+  <mesh position={[1.65,.65,-1.1]} castShadow receiveShadow><boxGeometry args={[2.4,1.3,.8]}/><primitive object={WOOD} attach="material"/></mesh>
+  <mesh position={[1.65,1.32,-1.1]} castShadow><boxGeometry args={[2.5,.12,.9]}/><meshStandardMaterial color="#b8865d"/></mesh>
+  <primitive object={root}/><primitive object={rat}/><primitive object={newTail}/>
   {post}
  </>;
 };
 export const RatShort:React.FC=()=>{
  const frame=useCurrentFrame();
- return <AbsoluteFill style={{background:"#5b83ad"}}>
-  <ThreeCanvas width={1080} height={1920} shadows gl={{antialias:false,stencil:false,powerPreference:"high-performance",toneMappingExposure:1}} camera={{position:[0,2.05,8.4],fov:38,near:.2,far:150}}>
-   <Room frame={frame}/>
-  </ThreeCanvas>
-  <Audio src={staticFile("audio/rat-sfx.wav")}/>
- </AbsoluteFill>;
+ return <AbsoluteFill style={{background:"#8da4bd"}}><ThreeCanvas width={1080} height={1920} shadows gl={{antialias:false,stencil:false,powerPreference:"high-performance",toneMappingExposure:1}} camera={{position:[0,2.05,7.7],fov:40,near:.2,far:150}}><Room frame={frame}/></ThreeCanvas><Audio src={staticFile("audio/rat-sfx.wav")}/></AbsoluteFill>;
 };
