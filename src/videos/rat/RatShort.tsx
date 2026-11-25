@@ -77,7 +77,7 @@ const Room:React.FC<{frame:number}>=({frame})=>{
  const root=useMemo(()=>new THREE.Group(),[]);
  const pool=useMemo(()=>new Pool(),[]);
  const man=useMemo(()=>new Actor(root),[root]);
- const rat=useMemo(()=>new Actor(root,new THREE.PlaneGeometry(1.75,.96)),[root]);
+ const rat=useMemo(()=>new Actor(root,new THREE.PlaneGeometry(2.5,1.35)),[root]);
  const tail=useMemo(()=>new Actor(root,new THREE.PlaneGeometry(.9,.72)),[root]);
  const ink=useMemo(()=>new InkPass(scene,camera as THREE.PerspectiveCamera),[scene,camera]);
  const lens=useMemo(()=>new LensBlur({maxCoC:24,nearScale:1.2}),[]);
@@ -107,12 +107,12 @@ const Room:React.FC<{frame:number}>=({frame})=>{
    if(frame%10<5)p.stroke([[170,310],[145,270]],7,"#fff0a6");
   }
  });
- rat.r=pool.req("rat-creature-"+Math.round(frame/2),1200,650,2,(p)=>drawRat(p,frame));
+ rat.r=pool.req("rat-creature-"+Math.round(frame/2),2400,1300,2,(p)=>drawRat(p,frame));
  tail.r=pool.req("rat-tail-"+Math.round(frame/2),600,480,1,(p)=>drawTail(p,frame));
  pool.flush();man.bind();rat.bind();tail.bind();
  man.mesh.visible=true;man.mesh.position.set(-.82,0,.15);man.mesh.rotation.set(0,0,0);man.mesh.scale.set(1,1,1);
- rat.mesh.visible=frame<132;rat.mesh.position.set(1.03,.73,.2);rat.mesh.rotation.y=-.08;rat.mesh.scale.set(1,1,1);
- tail.mesh.visible=frame>=205;tail.mesh.position.set(-.05,.76,.55);tail.mesh.rotation.y=-.08;tail.mesh.scale.setScalar(interpolate(frame,[205,235,270],[.15,.55,1],clamp));
+ rat.mesh.visible=frame<150;rat.mesh.position.set(.62,.86,.55);rat.mesh.rotation.y=-.08;rat.mesh.scale.set(1,1,1);
+ tail.mesh.visible=frame>=205;tail.mesh.position.set(-.35,.76,.68);tail.mesh.rotation.y=-.08;tail.mesh.scale.setScalar(interpolate(frame,[205,235,270],[.15,.55,1],clamp));
 
  const target=new THREE.Vector3(-.05,1.12,0);
  const push=interpolate(frame,[0,48,100,150,205,299],[0,.12,.25,.45,.28,.5],clamp);
