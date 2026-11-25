@@ -84,7 +84,7 @@ def main():
     subprocess.run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-i", str(SOURCE_MP3), "-ar", "48000", "-ac", "2",
-        "-c:a", "pcm_s24le", str(VOICE_PATH)
+        "-c:a", "pcm_s16le", str(VOICE_PATH)
     ], check=True)
 
     words = build_word_timings(text, duration)
