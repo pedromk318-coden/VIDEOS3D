@@ -25,6 +25,8 @@ jobs:
         run: npm install
       - name: TypeScript check
         run: npm run typecheck
+      - name: Prepare output directory
+        run: mkdir -p out
       - name: Render first 3 seconds (quarter scale)
         run: npm run render:test
       - name: Upload MP4 test
