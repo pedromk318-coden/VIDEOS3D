@@ -1,3 +1,4 @@
+// RatShort render target: 1080x1920, 30 fps, 10 seconds; no narration, original SFX only.
 import React from "react";
 import {Composition, registerRoot} from "remotion";
 import {RatShort} from "./videos/rat/RatShort";
