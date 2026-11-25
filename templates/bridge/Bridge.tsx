@@ -60,7 +60,9 @@ const Inner: React.FC<{ id: number; kit: Kit }> = ({ id, kit }) => {
     grade: new GradeEffect(GRADES.day, GRADE_STRENGTH.day),
     grain: new GrainEffect({ amount: 0.025, cellPx: 1.5 }), // film grain, OFF by default (inputProps post.grain): the reference measures no grain and it quadruples the file size
   }), [camera, scene]);
-  useEffect(() => () => fx.ink.dispose(), [fx]);
+  // Call the class implementation directly: the postprocessing/R3F lifecycle can shadow the instance's dispose field.
+  // This keeps cleanup safe during Remotion's frame-by-frame mount/unmount cycle.
+  useEffect(() => () => { InkPass.prototype.dispose.call(fx.ink); }, [fx]);
   const post = useMemo(() => (
     <EffectComposer multisampling={4}>
       <>{on.ink && <primitive object={fx.ink} dispose={null} />}</>
