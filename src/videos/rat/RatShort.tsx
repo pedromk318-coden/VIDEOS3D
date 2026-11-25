@@ -19,6 +19,9 @@ const MAN:Outfit={jacket:"#b94f35",pants:"#35445e",boots:"#282536",hair:"#302326
 const PLASTER=stoneHD("ratRoomPlaster",["#d9c7aa","#cdbb9f","#e2d2b8","#c5b294"],"#8e7d6a");
 const WOOD=rep(planksHD(),1.4,1.4);
 const BEAM=rep(beamHD(),1,1);
+const FLOOR_MAT=twoTone(new THREE.MeshLambertMaterial({map:WOOD}),.85);
+const WALL_MAT=twoTone(new THREE.MeshLambertMaterial({map:PLASTER}),.75);
+const BEAM_MAT=twoTone(new THREE.MeshLambertMaterial({map:BEAM}),.8);
 const makeBloom=()=>{
  const b=new BloomEffect({blendFunction:BlendFunction.ADD,intensity:.5,luminanceThreshold:1,luminanceSmoothing:.2,mipmapBlur:true,levels:6,radius:.6});
  const mip=b.mipmapBlurPass,setSize=mip.setSize.bind(mip);
@@ -130,15 +133,15 @@ const Room:React.FC<{frame:number}>=({frame})=>{
   <fog attach="fog" args={["#c58f83",16,36]}/>
   <ambientLight intensity={.18} color="#9b86a8"/>
   <hemisphereLight args={["#ffd9b0","#4e3448",.5]}/>
-  <directionalLight position={sun.clone().multiplyScalar(12).toArray()} target-position={[0,0,0]} intensity={LIGHTS.golden.sunI} color={LIGHTS.golden.sunCol} castShadow shadow-mapSize-width={4096} shadow-mapSize-height={4096}/>
+  <directionalLight position={sun.clone().multiplyScalar(12).toArray()} intensity={LIGHTS.golden.sunI} color={LIGHTS.golden.sunCol} castShadow shadow-mapSize-width={4096} shadow-mapSize-height={4096}/>
   <directionalLight position={[4,4,3]} intensity={.3} color="#8a9fe0"/>
   <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.05,-1]} receiveShadow>
    <planeGeometry args={[22,22]}/>
-   <meshLambertMaterial map={WOOD} />
+   <primitive object={FLOOR_MAT} attach="material"/>
   </mesh>
   <mesh position={[0,3.25,-3.2]} receiveShadow>
    <boxGeometry args={[12,6.5,.32]}/>
-   <meshLambertMaterial map={PLASTER}/>
+   <primitive object={WALL_MAT} attach="material"/>
   </mesh>
   <mesh position={[-1.75,2.55,-2.99]}>
    <boxGeometry args={[2.65,2.1,.06]}/>
@@ -146,7 +149,7 @@ const Room:React.FC<{frame:number}>=({frame})=>{
   </mesh>
   <mesh position={[-1.75,2.55,-2.94]}>
    <boxGeometry args={[.13,2.25,.1]}/>
-   <meshLambertMaterial map={BEAM}/>
+   <primitive object={BEAM_MAT} attach="material"/>
   </mesh>
   <mesh position={[-1.75,3.62,-2.94]}>
    <boxGeometry args={[2.75,.13,.1]}/>
