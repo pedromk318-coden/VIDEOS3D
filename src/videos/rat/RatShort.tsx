@@ -60,17 +60,27 @@ const drawRat=(p:Pen,frame:number)=>{
  p.stroke([[640,215+bob],[675,190+bob],[710,205+bob]],8,"#241726");
  if(chew>0){p.ell(915,390+bob,18,12,"#e36c73",0);p.stroke([[900,402+bob],[920,410+bob]],5);}
 };
-const drawTail=(p:Pen,frame:number)=>{
- const grow=interpolate(frame,[190,225,270,299],[0,.28,1,1],clamp);
+const drawAttachedTail=(p:Pen,frame:number)=>{
+ const grow=interpolate(frame,[175,205,245,275],[0,.22,.82,1],clamp);
  if(grow<=0)return;
- const curl=interpolate(frame,[205,260,299],[0,1,1],clamp);
- const pts:[[number,number],[number,number],[number,number],[number,number],[number,number]]=[
-  [100,360],[170,350-grow*55],[245,315-grow*110],[315,350-grow*170],[365,270-grow*220]
+ // Attached at the man's right rear waist; drawn BEFORE the body so its root disappears naturally behind the jacket.
+ const pts:[[number,number],[number,number],[number,number],[number,number],[number,number],[number,number]]=[
+  [355,760],
+  [405,785-grow*8],
+  [455,790-grow*34],
+  [490,755-grow*92],
+  [488,700-grow*135],
+  [450,665-grow*155]
  ];
- p.line(pts,"#bd765c",20+grow*12);
- p.stroke(pts,5,"#6f3e37");
- p.ell(pts[4][0],pts[4][1],13+grow*3,13+grow*3,"#d99275",3);
- if(curl>.4)p.arc(335,260-grow*170,65,55,190,350,7,"#6f3e37");
+ const width=10+grow*10;
+ p.stroke(pts,width+7,"#382a2b");
+ p.stroke(pts,width,"#a85e49");
+ p.stroke([[400,780-grow*8],[450,785-grow*34],[480,750-grow*92],[478,700-grow*135]],Math.max(3,width*.28),"#e2a080");
+ p.ell(pts[5][0],pts[5][1],8+grow*5,8+grow*5,"#c47b61",3,"#6f3e37");
+ if(grow>.55){
+  const pulse=Math.sin(frame*.32)*3;
+  p.arc(455,665-grow*155,26+pulse,24,195,345,4,"#6f3e37");
+ }
 };
 const Room:React.FC<{frame:number}>=({frame})=>{
  const {scene,camera}=useThree();
@@ -78,7 +88,6 @@ const Room:React.FC<{frame:number}>=({frame})=>{
  const pool=useMemo(()=>new Pool(),[]);
  const man=useMemo(()=>new Actor(root),[root]);
  const rat=useMemo(()=>new Actor(root,new THREE.PlaneGeometry(2.5,1.35)),[root]);
- const tail=useMemo(()=>new Actor(root,new THREE.PlaneGeometry(.9,.72)),[root]);
  const ink=useMemo(()=>new InkPass(scene,camera as THREE.PerspectiveCamera),[scene,camera]);
  const lens=useMemo(()=>new LensBlur({maxCoC:24,nearScale:1.2}),[]);
  const bloom=useMemo(()=>makeBloom(),[]);
@@ -100,6 +109,7 @@ const Room:React.FC<{frame:number}>=({frame})=>{
  const pose=frame<48?"march":frame<126?"stand":frame<205?"fall":"shock";
  const expr=transformed?"shock":sick?"pained":eating?"lick":"nervous";
  man.r=pool.req("rat-man-"+pose+"-"+expr+"-"+Math.round(frame/2),1800,3000,3,(p)=>{
+  drawAttachedTail(p,frame);
   bodyFront(p,MAN,{phase:frame/18,mode:pose==="march"?"march":pose==="fall"?"fall":"stand",expr,seed:27,light:-Math.PI/2,tilt:sick?8:transformed?-7:0,headTilt:eating?-10:transformed?-8:0,prop:eating?"icecream":null});
   if(sick||transformed){
    const a=interpolate(frame,[126,155,205],[0,.85,.3],clamp);
@@ -108,11 +118,9 @@ const Room:React.FC<{frame:number}>=({frame})=>{
   }
  });
  rat.r=pool.req("rat-creature-"+Math.round(frame/2),2400,1300,2,(p)=>drawRat(p,frame));
- tail.r=pool.req("rat-tail-"+Math.round(frame/2),600,480,1,(p)=>drawTail(p,frame));
- pool.flush();man.bind();rat.bind();tail.bind();
+ pool.flush();man.bind();rat.bind();
  man.mesh.visible=true;man.mesh.position.set(-.82,0,.15);man.mesh.rotation.set(0,0,0);man.mesh.scale.set(1,1,1);
  rat.mesh.visible=frame<150;rat.mesh.position.set(.62,.86,.55);rat.mesh.rotation.y=-.08;rat.mesh.scale.set(1,1,1);
- tail.mesh.visible=frame>=205;tail.mesh.position.set(-.35,.76,.68);tail.mesh.rotation.y=-.08;tail.mesh.scale.setScalar(interpolate(frame,[205,235,270],[.15,.55,1],clamp));
 
  const target=new THREE.Vector3(-.05,1.12,0);
  const push=interpolate(frame,[0,48,100,150,205,299],[0,.12,.25,.45,.28,.5],clamp);
