@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Generate narration with ElevenLabs and word-level timing for the existing audio mixer."""
-import base64
+"""Prepare the user's uploaded narration MP3 for the existing audio mixer.
+
+The mixer needs a 48 kHz stereo WAV and word timing spans. Since this is a
+pre-recorded MP3 (not an ElevenLabs API response), word spans are estimated
+from the narration text and the measured audio duration. Music and SFX remain
+on the original authored timeline.
+"""
 import json
-import os
 import re
 import subprocess
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VOICE_DIR = ROOT / "voice"
 TEXT_PATH = VOICE_DIR / "narration.txt"
+SOURCE_MP3 = ROOT.parent / "audio" / "narration.mp3"
 VOICE_PATH = VOICE_DIR / "voice.wav"
 WORDS_PATH = VOICE_DIR / "words.json"
-TMP_MP3 = VOICE_DIR / "voice-elevenlabs.mp3"
 
 
 def fail(message):
@@ -24,85 +25,77 @@ def fail(message):
     raise SystemExit(1)
 
 
+def audio_duration(path):
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+        check=True, capture_output=True, text=True
+    )
+    return float(result.stdout.strip())
+
+
+def build_word_timings(text, duration):
+    tokens = re.findall(r"\S+", text, flags=re.UNICODE)
+    if not tokens:
+        fail("templates/voice/narration.txt is empty.")
+
+    # Reserve natural pauses after punctuation, then distribute the remaining
+    # spoken time by word length. These spans drive music ducking only.
+    pauses = []
+    weights = []
+    for token in tokens:
+        pauses.append(0.24 if re.search(r"[.!?][\"'”’)]*$", token) else
+                      0.12 if re.search(r"[,;:][\"'”’)]*$", token) else 0.0)
+        letters = re.sub(r"[^\w]", "", token, flags=re.UNICODE)
+        weights.append(max(1, len(letters)) ** 0.82)
+
+    available = max(0.1, duration - sum(pauses) - 0.25)
+    total_weight = sum(weights)
+    cursor = 0.12
+    words = []
+    for token, weight, pause in zip(tokens, weights, pauses):
+        span = available * weight / total_weight
+        start = cursor
+        end = min(duration, start + span)
+        words.append({"w": token, "s": round(start, 4), "e": round(end, 4)})
+        cursor = end + pause
+
+    # Keep the final word within the actual file duration.
+    if words and words[-1]["e"] > duration:
+        words[-1]["e"] = round(duration, 4)
+    return words
+
+
 def main():
-    api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
-    voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
-    if not api_key:
-        fail("Missing GitHub Actions secret ELEVENLABS_API_KEY.")
-    if not voice_id:
-        fail("Missing GitHub Actions secret ELEVENLABS_VOICE_ID.")
+    if not SOURCE_MP3.is_file():
+        fail(f"Uploaded narration not found: {SOURCE_MP3}")
     if not TEXT_PATH.is_file():
-        fail(f"Narration text not found: {TEXT_PATH}")
+        fail(f"Narration transcript not found: {TEXT_PATH}")
 
     text = TEXT_PATH.read_text(encoding="utf-8").strip()
     if not text:
         fail("templates/voice/narration.txt is empty.")
 
     VOICE_DIR.mkdir(parents=True, exist_ok=True)
-    query = urllib.parse.urlencode({"output_format": "mp3_44100_128"})
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps?{query}"
-    payload = {
-        "text": text,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": {
-            "stability": 0.42,
-            "similarity_boost": 0.78,
-            "style": 0.28,
-            "use_speaker_boost": True
-        }
-    }
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"xi-api-key": api_key, "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:1200]
-        fail(f"ElevenLabs returned HTTP {exc.code}: {detail}")
-    except Exception as exc:
-        fail(f"ElevenLabs request failed: {exc}")
+    duration = audio_duration(SOURCE_MP3)
+    if duration <= 1:
+        fail(f"Audio duration looks invalid: {duration:.2f} seconds")
 
-    audio_b64 = result.get("audio_base64")
-    alignment = result.get("alignment") or result.get("normalized_alignment")
-    if not audio_b64 or not alignment:
-        fail("ElevenLabs response did not include audio_base64 and character timestamps.")
-
-    TMP_MP3.write_bytes(base64.b64decode(audio_b64))
     subprocess.run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-i", str(TMP_MP3), "-ar", "48000", "-ac", "2",
+        "-i", str(SOURCE_MP3), "-ar", "48000", "-ac", "2",
         "-c:a", "pcm_s24le", str(VOICE_PATH)
     ], check=True)
 
-    chars = alignment.get("characters", [])
-    starts = alignment.get("character_start_times_seconds", [])
-    ends = alignment.get("character_end_times_seconds", [])
-    if not chars or len(chars) != len(starts) or len(chars) != len(ends):
-        fail("ElevenLabs character alignment arrays have inconsistent lengths.")
-
-    spoken = "".join(chars)
-    words = []
-    for match in re.finditer(r"\S+", spoken, flags=re.UNICODE):
-        indexes = range(match.start(), match.end())
-        valid = [i for i in indexes if i < len(starts) and i < len(ends)]
-        if not valid:
-            continue
-        words.append({
-            "w": match.group(0),
-            "s": round(min(float(starts[i]) for i in valid), 4),
-            "e": round(max(float(ends[i]) for i in valid), 4),
-        })
-    if not words:
-        fail("Could not build word timings from ElevenLabs alignment.")
-
-    WORDS_PATH.write_text(json.dumps(words, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"ElevenLabs voice generated: {VOICE_PATH}")
-    print(f"Word timing entries: {len(words)}")
-    print(f"Speech duration: {max(w['e'] for w in words):.2f} seconds")
+    words = build_word_timings(text, duration)
+    WORDS_PATH.write_text(
+        json.dumps(words, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8"
+    )
+    print(f"Uploaded narration converted: {VOICE_PATH}")
+    print(f"Estimated word timing entries: {len(words)}")
+    print(f"Source speech duration: {duration:.2f} seconds")
+    print("No ElevenLabs API request or secret is required.")
 
 
 if __name__ == "__main__":
