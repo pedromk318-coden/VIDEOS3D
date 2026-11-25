@@ -1,4 +1,4 @@
-name: BridgeShort render test
+name: BridgeShort quality render test
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   render-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,15 +23,17 @@ jobs:
         run: npm install
       - name: TypeScript check
         run: npm run typecheck
-      - name: Render first 3 seconds
+      - name: Prepare output directory
+        run: mkdir -p out
+      - name: Render 3-second Full HD quality preview
         env:
           REMOTION_GL: angle
-        run: npx remotion render src/index.tsx BridgeShort out/bridge-test.mp4 --frames=0-89 --scale=0.25 --codec=h264
-      - name: Upload test video
+        run: npx remotion render src/index.tsx BridgeShort out/bridge-quality-preview.mp4 --frames=0-89 --scale=1 --codec=h264 --crf=16
+      - name: Upload Full HD preview
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bridge-test-video
-          path: out/bridge-test.mp4
+          name: bridge-fullhd-quality-preview
+          path: out/bridge-quality-preview.mp4
           if-no-files-found: ignore
           retention-days: 7
