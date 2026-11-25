@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VOICE_DIR = ROOT / "voice"
 TEXT_PATH = VOICE_DIR / "narration.txt"
-SOURCE_MP3 = ROOT.parent / "audio" / "narration.mp3"
+SOURCE_MP3 = ROOT.parent / "public" / "audio" / "narration.mp3"
 VOICE_PATH = VOICE_DIR / "voice.wav"
 WORDS_PATH = VOICE_DIR / "words.json"
 
